@@ -1,6 +1,6 @@
 # Neural Network
 
-building a neural network on javascript with es2015
+building a neural network on javascript with es6
 
 
 
