@@ -11,13 +11,13 @@ import styles from './main.css'
 			data				= []
 	
 	
-	// preparing data training to teach NN XOR logic
+	// setting data training to teach NN XOR logic
 	
 	function rndBinary(){
 		return Math.random() >= .5 ? 1 : 0
 	}
 	
-	for (let i of Array(200).keys()){
+	for (let i of Array(50000).keys()){
 		
 		let x = rndBinary(),
 				y = rndBinary()
@@ -28,7 +28,8 @@ import styles from './main.css'
 		})
 	}
 	
-	data.forEach(test => {
+	data.forEach((test, i) => {
+		console.log('-----------test #'+i+'-----------')
 		console.log('input: '+test.input)
 		console.log('expected: '+test.expected)
 		brain.feedForward(test.input)

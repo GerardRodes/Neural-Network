@@ -3,46 +3,51 @@ const ALPHA = 0.5	 // momentum, multiplier of last deltaWeight[0..n]
 
 export default class Neuron {
 	
-	constructor(numOutputs, indexOnLayer, prevLayer) {
-		this.numOutputs = numOutputs
-		this.prevLayer 	= prevLayer
-		this.index 			= indexOnLayer
+	constructor(prevLayer, nextLayer, layer, id) {
+		this.myLayer 		= layer
+		this.nextLayer 	= nextLayer || false
+		this.prevLayer 	= prevLayer || false
+		this.isBias			= false
+		this.id 				= id
 		
-		this.buildConnections()
+		console.log('created: '+this)
 	}
 	
+	toString(){
+		return this.isBias ? 'Neuron '+this.id+' (BIAS)' : 'Neuron '+this.id;
+	}
 
 	buildConnections() {
 		this.connections = []
-		
 		//creates a connection for each neuron on next layer
-		Array.from(Array(this.numOutputs), (_, i) => i).forEach(neuron => 
-			this.connections.push({weight: Math.random()})
-		)
+		this.nextLayer
+		.filter(neuron => !neuron.isBias)
+		.forEach(neuron => {
+			let weight = Math.random(),
+					connection = {
+						weight: 			weight,
+						deltaWeight: 	0,
+						toNeuron: 		neuron.id
+					}
+			
+			this.connections.push(connection)
+		})
+	}
+	
+	getConnection(id){
+		return this.connections.filter(conn => conn.toNeuron == id)[0]
 	}
 	
 	feedForward() {
-		let intensity = 0
+		let sum = 0
 		
-		//Sum the previus layer's outputs
+		//Sum the previus layer's outputs (which are our inputs)
 		//Include the bias node from the previus layer
-		this.prevLayer.forEach(neuron => {
-			intensity += neuron.outputVal * neuron.connections[this.index].weight
-			// console.log(neuron.outputVal,neuron.connections[this.index].weight)
+		this.prevLayer
+		.forEach(neuron => {
+			sum += neuron.outputVal * neuron.getConnection(this.id).weight
 		})
-		// console.log('setting output val from intensity: '+intensity)
-		this.outputVal = this.transferFunction(intensity)
-		// console.log('output set to: '+this.outputVal)
-	}
-	
-	// tanh -output range [-1.0, 1.0]
-	transferFunction(x) {
-		return Math.tanh(x)
-	}
-
-	// tanh derivative
-	transferFunctionDerivative(x) {
-		return 1 - x * x
+		this.outputVal = this.transferFunction(sum)
 	}
 	
 	calcOutputGradients(targetVal) {
@@ -55,27 +60,41 @@ export default class Neuron {
 		this.gradient = dow * this.transferFunctionDerivative(this.outputVal)
 	}
 	
-	sumDOW(nextLayer){
-		let sum = 0
-		// sum our contributions of the errors at the nodes we feed
-		nextLayer.slice(0,nextLayer.length - 1).forEach((neuron, i) => {
-			sum += this.connections[i].weight * neuron.gradient
+	updateInputWeights() {
+		// The weights to be updated are in the connections
+		// in the neurons in the preceding layer
+		this.prevLayer.forEach((neuron, i) => {
+			let oldDeltaWeight = neuron.getConnection(this.id).deltaWeight,
+					newDeltaWeight =
+						// Individual input, magnified by the gradient and train rate:
+						ETA * neuron.outputVal * this.gradient +
+						// Also add momentum = a fraction of the previus delta weight
+						ALPHA * oldDeltaWeight;
+						
+				neuron.getConnection(this.id).deltaWeight = newDeltaWeight
+				neuron.getConnection(this.id).weight += newDeltaWeight
 		})
 	}
 	
-	updateInputWeights(prevLayer) {
-		// The weights to be updated are in the conections
-		// in the neurons in the preceding layer
+	// tanh -output range [-1.0, 1.0]
+	transferFunction(x) {
+		return Math.tanh(x)
+	}
+
+	// tanh derivative
+	transferFunctionDerivative(x) {
+		return 1 - x * x
+	}
+	
+	sumDOW(nextLayer){
+		let sum = 0
+		// sum our contributions of the errors at the nodes we feed
+		nextLayer.filter(neuron => !neuron.isBias)
+						 .forEach((neuron, i) => {
+								sum += this.connections[i].weight * neuron.gradient
+							})
 		
-		prevLayer.forEach((neuron, i) => {
-			let oldDeltaWeight = neuron.connections[this.index],
-					newDeltaWeight =
-						// Individual input, magnified by the gradient and train rate:
-						ETA + neuron.outputVal + this.gradient
-						// Also add momentum = a fraction of the previus delta weight
-						ALPHA + oldDeltaWeight
-		})
-		
+		return sum
 	}
 
 }

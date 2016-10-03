@@ -4,6 +4,8 @@ export default class Brain {
 	
 	constructor(topology) {
 		this.topology = topology
+		
+		console.log('creating brain -> '+this.topology)
 		this.buildLayers()
 	}
 
@@ -11,29 +13,34 @@ export default class Brain {
 	//adds 1 extra neuron on every layer which is the BIAS neuron
 	buildLayers(){
 		this.layers = []
+		this.topology.forEach(layer => this.layers.push([]))
 		
 		this.topology.forEach((layerSize, iLayer) => {
-			let layer = [],
-					numNeuronsNextLayer = iLayer == this.topology.length - 1 ? 0 : this.topology[iLayer + 1]
+			let layer = this.layers[iLayer],
+					prevLayer = this.layers[iLayer - 1] || undefined,
+					nextLayer = this.layers[iLayer + 1] || undefined
 			
-			console.log('creating layer '+iLayer+' with a size of '+layerSize+' and '+numNeuronsNextLayer+' connections on every neuron')
-			for(let i = 0; i <= layerSize; i++){
-				var neuron = new Neuron(numNeuronsNextLayer, i, this.layers[iLayer - 1])
-				neuron.isBias = false
-				layer.push(neuron)
-				// console.log('neuron created on layer '+iLayer)
+			for (let i of Array(layerSize).keys()){
+				layer.push(new Neuron(prevLayer, nextLayer, layer, ""+iLayer+i))
 			}
 			
-			// setting the BIAS neuron outputVal to 1
-			layer.slice(-1)[0].outputVal = 1
-			layer.slice(-1)[0].isBias = true
-			this.layers.push(layer)
+			let neuronBias 				= new Neuron(prevLayer, nextLayer, layer, ""+iLayer+(layer.length) )
+			neuronBias.isBias 		= true
+			neuronBias.outputVal 	= 1
+			
+			layer.push(neuronBias)
+		})
+		
+		this.layers
+		.slice(0,this.layers.length - 1)
+		.forEach(layer => {
+			layer.forEach(neuron => neuron.buildConnections())
 		})
 	}
 	
 	feedForward(inputVals){
 		if (inputVals.length != this.layers[0].length - 1){
-			console.warn('Number of inputs different than neurons on first layer')
+			console.warn('input.length != inputLayer.length')
 		}
 		
 		let inputLayer = this.layers[0]
@@ -43,65 +50,61 @@ export default class Brain {
 							.forEach((neuron, i) => {
 								neuron.outputVal = inputVals[i]
 							})
+							
 		//Forward propagate
-		this.layers.forEach((layer, iLayer) => {
-			//we don't want the input layer
-			if (iLayer != 0) {
-				layer.forEach((neuron, iNeuron) => {
-					// we don't want the BIAS
-					if (!neuron.isBias){
-						neuron.feedForward()	
-					}
-				})
-			}
+		this.layers
+		.slice(1)
+		.forEach(layer => {
+			layer
+			.filter(neuron => !neuron.isBias)
+			.forEach(neuron => neuron.feedForward())
 		})
 	}
 	
 	backProp(targetVals){
 		// ***Calculate overall net error***
 		let outputLayer 	= this.layers.slice(-1)[0],
-				hiddenLayers	= this.layers.slice(1, this.layers.length),
+				hiddenLayers	= this.layers.slice(1),
 				error = 0
 				
 		// excluding BIAS neuron from output layer
-		outputLayer = outputLayer.filter(neuron => !neuron.isBias)
-		outputLayer.forEach((neuron, i) => {
-			let delta = targetVals[i] - neuron.outputVal
-			console.log('delta: '+delta)
-			error += delta * delta
-			console.log('error: '+error)
-		})
+		outputLayer.filter(neuron => !neuron.isBias)
+							 .forEach((neuron, i) => {
+									let delta = targetVals[i] - neuron.outputVal
+									error += delta * delta
+								})
 		// average error
 		error = error / outputLayer.length
 		error = Math.sqrt(error)
-		console.log('average error: '+error)
+		console.log('error: '+error)
 		
 		// ***Calculate output layer gradients***
-		outputLayer.forEach((neuron, i) => {
+		outputLayer
+		.filter(neuron => !neuron.isBias)
+		.forEach((neuron, i) => {
 			neuron.calcOutputGradients(targetVals[i])
 		})
 		
 		
 		// ***Calculate gradients on hidden layers***
-		hiddenLayers.slice().reverse().forEach((layer, i) => {
-			// we don't want the output layer
-			if (i != 0){ 
-				let nextLayerOnBrain = hiddenLayers.slice().reverse()[i - 1]
+		hiddenLayers
+		.slice()
+		.reverse()
+		.slice(1) //we don't want output layer
+		.forEach((layer, i) => {
+			let nextLayerOnBrain = this.layers.slice().reverse()[i]
 
-				layer.forEach((neuron, i) => {
-					neuron.calcHiddenGradients(nextLayerOnBrain)
-				})
-				
-			}
+			layer.forEach((neuron, i) => {
+				neuron.calcHiddenGradients(nextLayerOnBrain)
+			})
 		})
 		
 		
 		// ***For all layers from outputs to first hidden layer***
 		// update connection weights
-		
-		this.layers.slice(1).reverse().forEach((layer, i) => {
-			let prevLayerOnBrain = this.layers.slice().reverse()[i + 1]
-			layer.forEach((neuron, i) => neuron.updateInputWeights(prevLayerOnBrain))
+		hiddenLayers.slice().reverse().forEach((layer, i) => {
+			layer.filter(neuron => !neuron.isBias)
+					 .forEach((neuron, i) => neuron.updateInputWeights())
 		})
 	}
 	
